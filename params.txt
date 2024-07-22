@@ -1,0 +1,10 @@
+username: TohaomgBot
+password: 
+start_time: 1.5.2024
+finish_time: 1.6.2024
+minimum_article_size_int: 3500
+minimum_article_improv_int: 1000
+small_article_size_int: 10000
+allow_recommended_only: true
+articles_category_name: Статті конкурсу «Європейська весна 2024»
+nomination_template_name: Європейська весна 2024
