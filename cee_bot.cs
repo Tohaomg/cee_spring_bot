@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -91,16 +91,12 @@ class Article
 	List<string> countries;
 
 	private static int counter = 0;
+	private static int utc_diff;
 	private static string red_color = "style=background:#faa | ";
 	public static List<int> recommended_wd_list = new List<int>();
 	public static Dictionary<string,int> users_ordinals = new Dictionary<string,int>();
 
-	public static string[] disqualification_explanations = new string[]
-	{
-		"Користувач додав до статті менше ніж 1000 байтів", 
-		"Користувач створив статтю меншу за 3500 байтів", 
-		"Користувач створив нову статтю не зі списку запропонованих"
-	};
+	public static string[] disqualification_explanations;
 
 	public static Dictionary<string,string> countries_abbr = new Dictionary<string,string>();
 	public static Dictionary<string,double> countries_coefs = new Dictionary<string,double>();
@@ -135,6 +131,15 @@ class Article
 			else if( line_parts[0].EndsWith("_int") ) {parameters.Add(line_parts[0], Int32.Parse(line_parts[1]) );}
 			else {parameters.Add(line_parts[0], line_parts[1]);}
 		}
+		disqualification_explanations = new string[]
+		{
+			"Користувач додав до статті менше ніж " + parameters["minimum_article_improv_int"] + " байтів", 
+			"Користувач створив статтю меншу за " + parameters["minimum_article_size_int"] + " байтів", 
+			"Користувач створив нову статтю не зі списку запропонованих",
+			"Користувач створив статтю після завершення конкурсного періоду"
+		};
+		utc_diff = DateTime.Now.Hour - DateTime.UtcNow.Hour;
+		if(utc_diff < 0) {utc_diff += 24;}
 	}
 
 	//class constructor
@@ -192,9 +197,17 @@ class Article
 		{
 			client.Encoding = Encoding.UTF8;
 			html_source = client.DownloadString("ht"+"tps://uk.wikipedia.org/w/index.php?title=" + title.Replace(" ", "_").Replace("&", "%26") + "&action=history&limit=500");
+			if( html_source.Contains("новіших 5") )
+			{
+				StringBuilder html_source_sb = new StringBuilder(html_source);
+				while( html_source.Contains("rel=\"next\" class=\"mw-nextlink\">старіших 500</a>") )
+				{
+					html_source = client.DownloadString( "ht"+"tps://uk.wikipedia.org" + Regex.Matches(html_source, "<a href=\"([^\"]+)\" rel=\"next\" class=\"mw-nextlink\">старіших 500</a>")[0].Groups[1].Value );
+					html_source_sb.Append( html_source );
+				}
+				html_source = html_source_sb.ToString();
+			}
 		}
-		//case when there are more than 500 versions is not implemented, so give warning when such case does occur
-		if( html_source.Contains("новіших 5") ) {Console.WriteLine("WARNING! More than 500 edits"); Console.ReadKey();}
 		
 		//get wikidata item
 		mc = Regex.Matches(html_source, "<a href=\"ht"+"tps://www.wikidata.org/wiki/Special:EntityPage/Q(\\d+)\" title=\"Посилання на пов’язаний елемент сховища даних \\[g\\]\" accesskey=\"g\"><span>Елемент Вікіданих</span>", RegexOptions.Singleline);
@@ -216,7 +229,7 @@ class Article
 			if( list_item.Contains("class=\"history-deleted") ) {continue;} //skip deleted versions
 			//date
 			m2 = Regex.Matches(list_item, "class=\"mw-changeslist-date\" title=\"[^\"]+\">(\\d{2}):(\\d{2}), (\\d{1,2}) ([^\\s]+) (\\d{4})</a>", RegexOptions.Singleline)[0];
-			dt = new DateTime(Int32.Parse(m2.Groups[5].Value), month_numbers[m2.Groups[4].Value], Int32.Parse(m2.Groups[3].Value), Int32.Parse(m2.Groups[1].Value), Int32.Parse(m2.Groups[2].Value), 0).AddHours(3);
+			dt = new DateTime(Int32.Parse(m2.Groups[5].Value), month_numbers[m2.Groups[4].Value], Int32.Parse(m2.Groups[3].Value), Int32.Parse(m2.Groups[1].Value), Int32.Parse(m2.Groups[2].Value), 0).AddHours(utc_diff);
 			//username
 			edit_user = Regex.Matches(list_item, "class=\"(?:mw-redirect |)(?:new mw-userlink|mw-userlink|mw-userlink mw-anonuserlink)\"[^\\>]+><bdi>([^\\<]+)</bdi>", RegexOptions.Singleline)[0].Groups[1].Value;
 			//current size
@@ -235,13 +248,15 @@ class Article
 		}
 		//if a new article was created, check that it was created during the needed period
 		if(!edited_existing && versions_list.GetLast().datetime<(DateTime)parameters["start_time"] )
-		{Console.WriteLine("WARNING! This article was created before contest started"); Console.ReadKey();}
+		{Console.WriteLine("WARNING! This article was created before contest started - " + versions_list.GetLast().datetime); Console.ReadKey();}
 		if(versions_list.GetLast().datetime>(DateTime)parameters["finish_time"])
-		{Console.WriteLine("WARNING! This article was created after contest finished"); Console.ReadKey();}
+		{
+			is_disqualified = true; disqualification_reason = 3;
+			Console.WriteLine("WARNING! This article was created after contest finished - " + versions_list.GetLast().datetime); Console.ReadKey();
+		}
 
 		//get article creation time for a new article
-		if(!edited_existing) {
-			creation_time = versions_list.GetLast().datetime;}
+		if(!edited_existing) {creation_time = versions_list.GetLast().datetime;}
 		//or get the point in time at which user achieved minimal allowed bytecount for an improved article
 		else
 		{
@@ -336,7 +351,7 @@ class CEE_Bot:Bot
 		Article a;
 		foreach(Page p in pages)
 		{
-			if( p.title.Contains("Категорія:") ) {continue;}
+			if( p.title.Contains("Категорія:") || p.title.Contains("Шаблон:") || p.title.Contains("Вікіпедія:") ) {continue;}
 			a = new Article(p);
 			if( a.IsDisqualified() ) {articles_disqualified.Add(a);}
 			else {articles_eligible.Add(a);}
