@@ -233,7 +233,9 @@ class Article
 			//username
 			edit_user = Regex.Matches(list_item, "class=\"(?:mw-redirect |)(?:new mw-userlink|mw-userlink|mw-userlink mw-anonuserlink)\"[^\\>]+><bdi>([^\\<]+)</bdi>", RegexOptions.Singleline)[0].Groups[1].Value;
 			//current size
-			current_size = Int32.Parse(Regex.Matches(list_item, "<span class=\"history-size mw-diff-bytes\" data-mw-bytes=\"\\d+\">([\\d\\s]+) байт", RegexOptions.Singleline)[0].Groups[1].Value.Replace(""+(char)(160), ""));
+			if( list_item.Contains("data-mw-bytes=\"0\">порожня</span>") ) {current_size = 0;}
+			else
+			{current_size = Int32.Parse(Regex.Matches(list_item, "<span class=\"history-size mw-diff-bytes\" data-mw-bytes=\"\\d+\">([\\d\\s]+) байт", RegexOptions.Singleline)[0].Groups[1].Value.Replace(""+(char)(160), ""));}
 			//bytecount
 			bytecount = Int32.Parse(Regex.Matches(list_item, "class=\"mw-plusminus-[a-z]{3,4} mw-diff-bytes\" title=\"[^\"]+\">([^\\<]+)</(?:strong|span)>", RegexOptions.Singleline)[0].Groups[1].Value.Replace(""+(char)(160), ""));
 			//add to list
